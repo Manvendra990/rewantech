@@ -626,7 +626,7 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
                       size: 18,
                     ),
               label: Text(
-                _loading ? '' : 'Assign Task',
+                widget.taskId != null ? 'Update Task' : 'Assign Task',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,

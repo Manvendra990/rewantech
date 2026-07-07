@@ -222,43 +222,43 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        Divider(color: Colors.grey.shade200),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'New to RewanTech?',
-                          style: TextStyle(color: _subtitle, fontSize: 14),
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 48,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const RegisterPage(),
-                                ),
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFDCE6FB),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text(
-                              'REQUEST ACCESS',
-                              style: TextStyle(
-                                color: Color(0xFF1F2937),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ),
+                        // Divider(color: Colors.grey.shade200),
+                        // const SizedBox(height: 16),
+                        // const Text(
+                        //   'New to RewanTech?',
+                        //   style: TextStyle(color: _subtitle, fontSize: 14),
+                        // ),
+                        // const SizedBox(height: 12),
+                        // SizedBox(
+                        //   width: double.infinity,
+                        //   height: 48,
+                        //   child: ElevatedButton(
+                        //     onPressed: () {
+                        //       Navigator.push(
+                        //         context,
+                        //         MaterialPageRoute(
+                        //           builder: (_) => const RegisterPage(),
+                        //         ),
+                        //       );
+                        //     },
+                        //     style: ElevatedButton.styleFrom(
+                        //       backgroundColor: const Color(0xFFDCE6FB),
+                        //       elevation: 0,
+                        //       shape: RoundedRectangleBorder(
+                        //         borderRadius: BorderRadius.circular(12),
+                        //       ),
+                        //     ),
+                        //     child: const Text(
+                        //       'REQUEST ACCESS',
+                        //       style: TextStyle(
+                        //         color: Color(0xFF1F2937),
+                        //         fontWeight: FontWeight.w700,
+                        //         fontSize: 13,
+                        //         letterSpacing: 0.5,
+                        //       ),
+                        //     ),
+                        //   ),
+                        // ),
                       ],
                     ),
                   ),

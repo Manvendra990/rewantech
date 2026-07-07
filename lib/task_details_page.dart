@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:rtstrack/assign_task_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class TaskDetailPage extends StatefulWidget {
@@ -37,14 +38,19 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
   String? _completedBy;
   bool _completing = false;
 
+  // ── Editable task data (local copy so edits reflect immediately
+  // without needing to pop and re-fetch from the parent list) ──
+  late Map<String, dynamic> _taskData;
+
   static const _heading = Color(0xFF111827);
   static const _subtitle = Color(0xFF6B7280);
 
   @override
   void initState() {
     super.initState();
-    _status = widget.taskData['status'] ?? 'pending';
-    _completedBy = widget.taskData['completedBy'];
+    _taskData = Map<String, dynamic>.from(widget.taskData);
+    _status = _taskData['status'] ?? 'pending';
+    _completedBy = _taskData['completedBy'];
     _loadUser();
     _loadTeammates();
     _commentCtrl.addListener(_onCommentChanged);
@@ -76,6 +82,8 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
     setState(() {
       _status = 'completed';
       _completedBy = _currentName;
+      _taskData['status'] = 'completed';
+      _taskData['completedBy'] = _currentName;
       _completing = false;
     });
   }
@@ -260,9 +268,48 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
     return RichText(text: TextSpan(children: spans));
   }
 
+  // ── Edit task ───────────────────────────────────────
+  // Opens AssignTaskPage in edit mode (taskId + existingData set), which
+  // already knows how to prefill itself and call TaskService.updateTask.
+  // That page updates Firestore directly and doesn't return the new data,
+  // so once it pops we re-fetch this task doc to refresh what's on screen.
+  Future<void> _openEditPage() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AssignTaskPage(
+          projectId: widget.projectId,
+          projectName: (_taskData['projectName'] ?? '') as String,
+          taskId: widget.taskId,
+          existingData: _taskData,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    final freshDoc = await _firestore
+        .collection('projects')
+        .doc(widget.projectId)
+        .collection('tasks')
+        .doc(widget.taskId)
+        .get();
+
+    if (mounted && freshDoc.exists) {
+      final freshData = freshDoc.data();
+      if (freshData != null) {
+        setState(() {
+          _taskData = freshData;
+          _status = _taskData['status'] ?? _status;
+          _completedBy = _taskData['completedBy'];
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final data = widget.taskData;
+    final data = _taskData;
     final priority = data['priority'] ?? 'Medium';
     final assignedNames = data['assignedToNames'] as List? ?? [];
 
@@ -281,6 +328,13 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
             fontSize: 18,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, color: _heading),
+            tooltip: 'Edit task',
+            onPressed: _openEditPage,
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(

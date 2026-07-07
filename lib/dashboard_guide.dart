@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:rtstrack/auth/register_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:rtstrack/compney_info/customer/customer_screen.dart';
-import 'package:rtstrack/compney_info/employee/attendance_history.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:rtstrack/services/task_services.dart';
 import 'package:rtstrack/compney_info/employee/team_attendance.dart';
-import 'package:rtstrack/compney_info/employee/team_screen.dart';
-import 'package:rtstrack/compney_info/pament/pament_history.dart';
-import 'package:rtstrack/compney_info/tools/doman_detail.dart';
-import 'package:rtstrack/compney_info/tools/subscription_Details.dart';
 import 'package:rtstrack/lead/leads_screen.dart';
-import 'package:rtstrack/profilescreen.dart';
 import 'package:rtstrack/project_screen.dart';
 import 'package:rtstrack/services/auth_services.dart';
 import 'package:rtstrack/services/lead_notifire_service.dart';
@@ -23,7 +18,7 @@ class DashboardGridScreen extends StatefulWidget {
 }
 
 class _DashboardGridScreenState extends State<DashboardGridScreen> {
-  int _navIndex = 0;
+  // int _navIndex = 0;
 
   static const _heading = Color(0xFF111827);
   static const _subtitle = Color(0xFF6B7280);
@@ -31,6 +26,7 @@ class _DashboardGridScreenState extends State<DashboardGridScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _authService = AuthService();
   final _leadNotifService = LeadNotificationService();
+  final _taskService = TaskService();
   Map<String, dynamic>? _userData;
 
   @override
@@ -76,7 +72,9 @@ class _DashboardGridScreenState extends State<DashboardGridScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'You have $activeCount active tasks today. Stay focused.',
+            activeCount > 0
+                ? 'You have $activeCount active tasks today. Stay focused.'
+                : 'No active tasks right now. Nice and clear!',
             style: const TextStyle(color: _subtitle, fontSize: 13),
           ),
           const SizedBox(height: 14),
@@ -120,6 +118,11 @@ class _DashboardGridScreenState extends State<DashboardGridScreen> {
         icon: Icons.folder_outlined,
         label: 'Projects',
         subtitle: 'Manage Work',
+        // Total count of all projects (adjust collection/query as needed)
+        countStream: FirebaseFirestore.instance
+            .collection('projects')
+            .snapshots()
+            .map((snap) => snap.docs.length),
         onTap: () {
           Navigator.push(
             context,
@@ -131,6 +134,11 @@ class _DashboardGridScreenState extends State<DashboardGridScreen> {
         icon: Icons.groups_outlined,
         label: 'Leads',
         subtitle: 'Sales Pipeline',
+        // Total count of all leads (adjust collection/query as needed)
+        countStream: FirebaseFirestore.instance
+            .collection('leads')
+            .snapshots()
+            .map((snap) => snap.docs.length),
         onTap: () {
           Navigator.push(
             context,
@@ -151,13 +159,15 @@ class _DashboardGridScreenState extends State<DashboardGridScreen> {
         },
       ),
       _DashboardItem(
-        icon: Icons.how_to_reg_outlined,
+        icon: Icons.people_alt_outlined,
         label: 'Add User',
         subtitle: 'Manage Users',
+
+        // Total count of all members (adjust collection name to match your actual registration collection if this differs)
         onTap: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => RegisterPage()),
+            MaterialPageRoute(builder: (_) => const RegisterPage()),
           );
         },
       ),
@@ -178,11 +188,35 @@ class _DashboardGridScreenState extends State<DashboardGridScreen> {
         elevation: 0,
         title: Row(
           children: [
-            Icon(Icons.grid_view_rounded, color: primary),
-            const SizedBox(width: 8),
-            Text(
-              'Dashboard',
-              style: TextStyle(color: primary, fontWeight: FontWeight.bold),
+            // Icon(Icons.grid_view_rounded, color: primary),
+            // const SizedBox(width: 8),
+            // Text(
+            //   'Dashboard',
+            //   style: TextStyle(color: primary, fontWeight: FontWeight.bold),
+            // ),
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.asset(
+                  'assets/icons/app_icon.png', // 👈 apna path daal do
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            
+            const SizedBox(width: 10),
+            const Text(
+              'Rewan Tech',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: _heading,
+              ),
             ),
           ],
         ),
@@ -263,16 +297,66 @@ class _DashboardGridScreenState extends State<DashboardGridScreen> {
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
               ),
               const SizedBox(height: 16),
-              _momentumCard(activeCount: 8, progress: 0.65),
+              StreamBuilder<QuerySnapshot>(
+                stream: _taskService.getAllMyTasks(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return _momentumCard(activeCount: 0, progress: 0);
+                  }
+
+                  final docs = snapshot.data!.docs;
+                  final total = docs.length;
+                  final completed = docs.where((d) {
+                    final data = d.data() as Map<String, dynamic>;
+                    return data['status'] == 'completed';
+                  }).length;
+                  final active = total - completed;
+                  final progress = total == 0 ? 0.0 : completed / total;
+
+                  return _momentumCard(activeCount: active, progress: progress);
+                },
+              ),
               const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
-                    child: _StatCard(label: 'Active Projects', value: '12'),
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('projects')
+                          .where('status', isEqualTo: 'active')
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        final loading =
+                            snapshot.connectionState == ConnectionState.waiting;
+                        final count = snapshot.data?.docs.length ?? 0;
+                        return _StatCard(
+                          label: 'Active Projects',
+                          value: loading
+                              ? '--'
+                              : count.toString().padLeft(2, '0'),
+                        );
+                      },
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _StatCard(label: 'New Leads', value: '08'),
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('leads')
+                          .where('status', isEqualTo: 'new')
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        final loading =
+                            snapshot.connectionState == ConnectionState.waiting;
+                        final count = snapshot.data?.docs.length ?? 0;
+                        return _StatCard(
+                          label: 'New Leads',
+                          value: loading
+                              ? '--'
+                              : count.toString().padLeft(2, '0'),
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -342,12 +426,15 @@ class _DashboardItem {
   final String label;
   final String subtitle;
   final VoidCallback onTap;
+  // Optional stream of a total count to show as a badge on the card.
+  final Stream<int>? countStream;
 
   _DashboardItem({
     required this.icon,
     required this.label,
     required this.subtitle,
     required this.onTap,
+    this.countStream,
   });
 }
 
@@ -371,36 +458,76 @@ class _DashboardCard extends StatelessWidget {
             border: Border.all(color: Colors.grey.shade200),
           ),
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(item.icon, color: primary, size: 18),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    item.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+              ),
+              if (item.countStream != null)
+                Positioned(
+                  top: -6,
+                  right: -6,
+                  child: StreamBuilder<int>(
+                    stream: item.countStream,
+                    builder: (context, snapshot) {
+                      final count = snapshot.data ?? 0;
+                      if (count <= 0) return const SizedBox.shrink();
+                      return Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFE11D48),
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          count > 99 ? '99+' : '$count',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
-                child: Icon(item.icon, color: primary, size: 18),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                item.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                item.subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 10.5, color: Colors.grey.shade600),
-              ),
             ],
           ),
         ),

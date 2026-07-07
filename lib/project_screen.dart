@@ -19,10 +19,33 @@ class _ProjectScreenState extends State<ProjectScreen> {
   String? _userRole;
   String _userName = '';
 
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+  String _selectedStatusFilter = 'all';
+
   static const _bg = Color(0xFFF0F4FF);
   static const _heading = Color(0xFF111827);
   static const _subtitle = Color(0xFF6B7280);
   static const _blue = Color(0xFF2F6FED);
+
+  // ── Status config ──────────────────────────────────
+  static const Map<String, Color> _statusColors = {
+    'new': Color(0xFF6B7280),
+    'active': Color(0xFF2F6FED),
+    'testing': Color(0xFFCA8A04),
+    'hold': Color(0xFFE11D48),
+    'delivered': Color(0xFF9333EA),
+    'completed': Color(0xFF16A34A),
+  };
+
+  static const List<String> _statuses = [
+    'new',
+    'active',
+    'testing',
+    'hold',
+    'delivered',
+    'completed',
+  ];
 
   @override
   void initState() {
@@ -33,6 +56,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -63,6 +87,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
       'name': name,
       'createdBy': _uid,
       'createdAt': FieldValue.serverTimestamp(),
+      'status': 'new',
     });
 
     _nameController.clear();
@@ -70,6 +95,96 @@ class _ProjectScreenState extends State<ProjectScreen> {
 
     if (!mounted) return;
     Navigator.pop(context);
+  }
+
+  Future<void> _updateStatus(String projectId, String newStatus) async {
+    try {
+      await _firestore.collection('projects').doc(projectId).update({
+        'status': newStatus,
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Status update failed: $e')));
+    }
+  }
+
+  void _showStatusPicker(String projectId, String currentStatus) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                child: Text(
+                  'Change Status',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                ),
+              ),
+              ..._statuses.map((s) {
+                final color = _statusColors[s]!;
+                final selected = s == currentStatus;
+                return ListTile(
+                  leading: CircleAvatar(radius: 6, backgroundColor: color),
+                  title: Text(
+                    s[0].toUpperCase() + s.substring(1),
+                    style: TextStyle(
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                    ),
+                  ),
+                  trailing: selected
+                      ? const Icon(Icons.check, color: _heading)
+                      : null,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    if (!selected) _updateStatus(projectId, s);
+                  },
+                );
+              }),
+              const SizedBox(height: 10),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _statusBadge(String projectId, String status) {
+    final color = _statusColors[status] ?? _statusColors['new']!;
+    return GestureDetector(
+      onTap: _isAdmin ? () => _showStatusPicker(projectId, status) : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              status[0].toUpperCase() + status.substring(1),
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+              ),
+            ),
+            if (_isAdmin) ...[
+              const SizedBox(width: 2),
+              Icon(Icons.arrow_drop_down, size: 14, color: color),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   void _showCreateSheet() {
@@ -224,7 +339,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
                     icon: const Icon(Icons.arrow_back),
                     onPressed: () => Navigator.pop(context),
                   ),
-                   const SizedBox(width: 10),
+                  const SizedBox(width: 10),
                   Container(
                     width: 50,
                     height: 50,
@@ -303,6 +418,52 @@ class _ProjectScreenState extends State<ProjectScreen> {
 
             const SizedBox(height: 16),
 
+            // ── Search + Filter ─────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (value) =>
+                    setState(() => _searchQuery = value.trim().toLowerCase()),
+                decoration: InputDecoration(
+                  hintText: 'Search projects...',
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 36,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  _filterChip('all', 'All'),
+                  ..._statuses.map(
+                    (s) => _filterChip(s, s[0].toUpperCase() + s.substring(1)),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
             // ── List ────────────────────────────────────
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
@@ -314,7 +475,21 @@ class _ProjectScreenState extends State<ProjectScreen> {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  final docs = snapshot.data!.docs;
+                  var docs = snapshot.data!.docs;
+
+                  docs = docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final name = (data['name'] ?? '').toString().toLowerCase();
+                    final status = (data['status'] ?? 'new').toString();
+
+                    final matchesSearch =
+                        _searchQuery.isEmpty || name.contains(_searchQuery);
+                    final matchesStatus =
+                        _selectedStatusFilter == 'all' ||
+                        status == _selectedStatusFilter;
+
+                    return matchesSearch && matchesStatus;
+                  }).toList();
 
                   // if (docs.isEmpty) {
                   //   return SingleChildScrollView(
@@ -328,6 +503,35 @@ class _ProjectScreenState extends State<ProjectScreen> {
                   //     ),
                   //   );
                   // }
+
+                  if (docs.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 60),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.search_off,
+                              size: 40,
+                              color: Color(0xFF9CA3AF),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              _searchQuery.isNotEmpty ||
+                                      _selectedStatusFilter != 'all'
+                                  ? 'No projects match your search/filter.'
+                                  : 'No projects yet.',
+                              style: const TextStyle(
+                                color: _subtitle,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
 
                   return ListView.builder(
                     physics: const BouncingScrollPhysics(),
@@ -346,6 +550,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
                       final id = docs[i].id;
                       final name = data['name'] ?? '';
                       final createdAt = data['createdAt'] as Timestamp?;
+                      final status = data['status'] ?? 'new';
                       final isFirst = i == 0;
 
                       return Padding(
@@ -409,13 +614,22 @@ class _ProjectScreenState extends State<ProjectScreen> {
                                           color: _heading,
                                         ),
                                       ),
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        _timeAgo(createdAt),
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: _subtitle,
-                                        ),
+                                      const SizedBox(height: 6),
+                                      Row(
+                                        children: [
+                                          _statusBadge(id, status),
+                                          const SizedBox(width: 8),
+                                          Flexible(
+                                            child: Text(
+                                              _timeAgo(createdAt),
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: _subtitle,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
@@ -443,6 +657,36 @@ class _ProjectScreenState extends State<ProjectScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _filterChip(String value, String label) {
+    final selected = _selectedStatusFilter == value;
+    final color = value == 'all' ? _blue : (_statusColors[value] ?? _blue);
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedStatusFilter = value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? color : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selected ? color : const Color(0xFFE5E7EB),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: selected ? Colors.white : _subtitle,
+            ),
+          ),
         ),
       ),
     );

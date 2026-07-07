@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 // ---------------------------------------------------------------------------
@@ -123,9 +124,6 @@ class ServiceProvided {
   }
 }
 
-/// Deal / won-lead details captured when a customer is created from a won
-/// lead — the project, payment structure, and agent incentive info that used
-/// to live in the separate "Deal Details" screen.
 class DealDetails {
   final String? leadId;
   final String projectName;
@@ -470,11 +468,6 @@ class _CustomerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // NOTE: The shadow lives on this outer Container (kept transparent),
-    // while the white fill + rounded clip move onto a Material below.
-    // This keeps the ListTile's ink splash / ripple visible — previously
-    // the DecoratedBox/Container painted an opaque white background over
-    // the InkWell's Material layer, which suppressed the ripple.
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -919,11 +912,6 @@ class _DetailChipText extends StatelessWidget {
 // ADD CUSTOMER BOTTOM SHEET (form)
 // ---------------------------------------------------------------------------
 
-/// Public so it can be opened from other screens (e.g. LeadsScreen when a
-/// lead is marked "Won") with prefilled data via `showModalBottomSheet`.
-///
-/// Pops with `true` when a customer is saved successfully, so the caller
-/// can `await` the sheet and react (e.g. flip the source lead's status).
 class AddCustomerSheet extends StatefulWidget {
   final String? leadId;
   final String initialOwnerName;
@@ -933,10 +921,6 @@ class AddCustomerSheet extends StatefulWidget {
   final String initialDescription;
   final String initialAgentName;
 
-  /// When set, this sheet opens in **edit mode**: every field (owner,
-  /// business, phone, social accounts, services, deal details) is prefilled
-  /// from this customer, and saving performs a Firestore `update()` on this
-  /// customer's doc instead of creating a new one.
   final Customer? existingCustomer;
 
   const AddCustomerSheet({
@@ -1003,9 +987,7 @@ class _AddCustomerSheetState extends State<AddCustomerSheet> {
         widget.existingCustomer?.dealDetails?.agentName ??
         widget.initialAgentName,
   );
-  // Captured the moment this sheet opens for the "Won" flow (same moment the
-  // lead's status was set to Won). In edit mode this is overwritten in
-  // initState with the deal's original closed date instead.
+
   DateTime _dealClosedDate = DateTime.now();
   final _incentivePercentController = TextEditingController();
   final _incentiveAmountController = TextEditingController();
@@ -1038,9 +1020,6 @@ class _AddCustomerSheetState extends State<AddCustomerSheet> {
 
     final existing = widget.existingCustomer;
     if (existing != null) {
-      // Prefill social accounts and services with copies of the existing
-      // ones so they show up as "Added Accounts" / "Added Services" and can
-      // be removed/re-added like normal, without mutating the source lists.
       _socialAccounts.addAll(existing.socialAccounts);
       _services.addAll(existing.services);
 
@@ -1212,6 +1191,48 @@ class _AddCustomerSheetState extends State<AddCustomerSheet> {
     setState(() => _services.removeAt(index));
   }
 
+  Future<void> _createProjectForNewCustomer({
+    required String customerId,
+    required String businessName,
+  }) async {
+    if (widget.leadId != null) {
+      final existing = await FirebaseFirestore.instance
+          .collection('projects')
+          .where('leadId', isEqualTo: widget.leadId)
+          .limit(1)
+          .get();
+      if (existing.docs.isNotEmpty) return;
+    }
+
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You must be signed in to auto-create a project'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final createdBy = (currentUser.displayName?.isNotEmpty ?? false)
+        ? currentUser.displayName!
+        : (currentUser.email ??
+              (_agentNameController.text.trim().isNotEmpty
+                  ? _agentNameController.text.trim()
+                  : 'Unknown'));
+
+    await FirebaseFirestore.instance.collection('projects').add({
+      'name': businessName,
+      'createdBy': currentUser.uid,
+      'createdAt': FieldValue.serverTimestamp(),
+      'status': 'new',
+      'customerId': customerId,
+      'leadId': widget.leadId,
+    });
+  }
+
   Future<void> _saveToCloud() async {
     final ownerName = _ownerNameController.text.trim();
     final businessName = _businessNameController.text.trim();
@@ -1227,9 +1248,6 @@ class _AddCustomerSheetState extends State<AddCustomerSheet> {
 
     setState(() => _isSaving = true);
 
-    // When payment type is Monthly, there's no "Total Amount" field in the
-    // UI anymore — use the monthly amount as the effective total so
-    // pendingAmount / hasDealInfo still work correctly.
     final total = _paymentType == 'One-time'
         ? (double.tryParse(_totalAmountController.text) ?? 0)
         : (double.tryParse(_monthlyAmountController.text) ?? 0);
@@ -1238,16 +1256,10 @@ class _AddCustomerSheetState extends State<AddCustomerSheet> {
     final incentivePercent = double.tryParse(_incentivePercentController.text);
     final incentiveAmount = double.tryParse(_incentiveAmountController.text);
 
-    // In edit mode, preserve the deal's original leadId (a customer edited
-    // later shouldn't lose the link back to the lead it came from) instead
-    // of using widget.leadId, which is only passed on the initial Won flow.
     final effectiveLeadId = _isEditMode
         ? widget.existingCustomer!.dealDetails?.leadId
         : widget.leadId;
 
-    // Only attach deal details if this sheet was opened from a won lead, the
-    // user actually filled in a total amount, or we're editing a customer
-    // that already had deal details.
     final hasDealInfo =
         _isFromWonLead ||
         total > 0 ||
@@ -1288,16 +1300,23 @@ class _AddCustomerSheetState extends State<AddCustomerSheet> {
               'dealDetails': dealDetails?.toMap(),
             });
       } else {
-        await FirebaseFirestore.instance.collection('customers').add({
-          'ownerName': ownerName,
-          'businessName': businessName,
-          'phoneNumber': _phoneController.text.trim(),
-          'leadId': widget.leadId,
-          'socialAccounts': _socialAccounts.map((e) => e.toMap()).toList(),
-          'services': _services.map((e) => e.toMap()).toList(),
-          'dealDetails': dealDetails?.toMap(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+        final customerDoc = await FirebaseFirestore.instance
+            .collection('customers')
+            .add({
+              'ownerName': ownerName,
+              'businessName': businessName,
+              'phoneNumber': _phoneController.text.trim(),
+              'leadId': widget.leadId,
+              'socialAccounts': _socialAccounts.map((e) => e.toMap()).toList(),
+              'services': _services.map((e) => e.toMap()).toList(),
+              'dealDetails': dealDetails?.toMap(),
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+
+        await _createProjectForNewCustomer(
+          customerId: customerDoc.id,
+          businessName: businessName,
+        );
       }
 
       if (mounted) {
@@ -1449,9 +1468,6 @@ class _AddCustomerSheetState extends State<AddCustomerSheet> {
                 ),
                 const SizedBox(height: 14),
 
-                // Deal closed date — auto-set to the moment this sheet was
-                // opened (i.e. the same moment the lead was marked Won), so
-                // it's shown read-only rather than as a date picker.
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -1689,8 +1705,6 @@ class _AddCustomerSheetState extends State<AddCustomerSheet> {
                 ),
                 const SizedBox(height: 14),
 
-                // "Total Amount" only applies to One-time deals — fully
-                // removed from the form when payment type is Monthly.
                 if (_paymentType == 'One-time') ...[
                   TextField(
                     controller: _totalAmountController,

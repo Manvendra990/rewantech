@@ -986,29 +986,33 @@ class _DashboardPageState extends State<DashboardPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             GestureDetector(
-                              onTap: () async {
-                                await AlarmHelper.cancelTaskAlarm(doc.id);
-                                await _taskService.markTaskComplete(
-                                  widget.projectId,
-                                  doc.id,
-                                  _userData?['name'] ??
-                                      'Unknown', // 👈 add karo
-                                );
-                              },
-                              child: Container(
-                                margin: const EdgeInsets.only(
-                                  top: 22,
-                                  right: 10,
-                                ),
-                                width: 22,
-                                height: 22,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: const Color(0xFF2F6FED),
-                                    width: 2,
-                                  ),
-                                ),
+                              // onTap: () async {
+                              //   await AlarmHelper.cancelTaskAlarm(doc.id);
+                              //   await _taskService.markTaskComplete(
+                              //     widget.projectId,
+                              //     doc.id,
+                              //     _userData?['name'] ??
+                              //         'Unknown', // 👈 add karo
+                              //   );
+                              // },
+                              // child: Container(
+                              //   margin: const EdgeInsets.only(
+                              //     top: 22,
+                              //     right: 10,
+                              //   ),
+                              //   width: 22,
+                              //   height: 22,
+                              //   decoration: BoxDecoration(
+                              //     shape: BoxShape.circle,
+                              //     border: Border.all(
+                              //       color: const Color(0xFF2F6FED),
+                              //       width: 2,
+                              //     ),
+                              //   ),
+                              // ),
+                              child: Icon(
+                                Icons.push_pin_rounded,
+                                color: Colors.red,
                               ),
                             ),
                             Expanded(

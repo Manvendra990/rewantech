@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:rtstrack/dashboard_guide.dart';
 import 'package:rtstrack/project_screen.dart';
 import 'package:rtstrack/services/auth_services.dart';
 
@@ -46,9 +47,30 @@ class _RegisterPageState extends State<RegisterPage> {
 
     if (error == null) {
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const ProjectScreen()),
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text('Success'),
+          content: const Text('Account created successfully!'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // closes the dialog
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const DashboardGridScreen(),
+                  ),
+                );
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       );
     } else {
       ScaffoldMessenger.of(
@@ -118,10 +140,15 @@ class _RegisterPageState extends State<RegisterPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        IconButton(
+                          icon: const Icon(Icons.arrow_back),
+                          onPressed: () => Navigator.pop(context),
+                        ),
                         SizedBox(
                           // 👇 logo PNG me upar/niche transparent padding hai,
                           // OverflowBox se sirf visible content ka height le rahe hain
-                          height: 100, // gap zyada ho to isko aur kam karo
+                          height: 100,
+                          width: 200, // gap zyada ho to isko aur kam karo
                           child: OverflowBox(
                             maxHeight: 200, // image ki original render height
                             child: Image.asset('assets/logo.png', width: 200),
