@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:rtstrack/assign_task_page.dart';
+// import 'package:rtstrack/assign_task_page.dart';
 import 'package:rtstrack/auth/login_page.dart';
-import 'package:rtstrack/compney_info/employee/team_screen.dart';
-import 'package:rtstrack/profilescreen.dart';
+// import 'package:rtstrack/compney_info/employee/team_screen.dart';
+// import 'package:rtstrack/profilescreen.dart';
 import 'package:rtstrack/services/auth_services.dart';
 import 'package:rtstrack/services/lead_notifire_service.dart';
 import 'package:rtstrack/services/task_services.dart';
 import 'package:rtstrack/widgets/alarm_helper.dart';
 import 'package:rtstrack/widgets/custom_app_drawer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:rtstrack/task_assing_screen.dart';
 
 class DashboardPage extends StatefulWidget {
   final String projectId;
@@ -526,6 +527,170 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  // ---------------------------------------------------------------------
+  // Pending tasks bottom sheet (opened by tapping the Daily Momentum card)
+  // Reuses _showTaskDetail for full detail / edit / mark-complete, so we
+  // don't duplicate that logic here.
+  // ---------------------------------------------------------------------
+  void _showPendingTasksSheet(
+    BuildContext context,
+    List<QueryDocumentSnapshot> pendingDocs,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.3,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (_, scrollController) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE5E7EB),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'Pending Tasks (${pendingDocs.length})',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: _heading,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: pendingDocs.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No pending tasks 🎉',
+                              style: TextStyle(
+                                color: _subtitle,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          )
+                        : ListView.separated(
+                            controller: scrollController,
+                            itemCount: pendingDocs.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, index) {
+                              final doc = pendingDocs[index];
+                              final data = doc.data() as Map<String, dynamic>;
+                              final title = (data['title'] ?? 'Untitled Task')
+                                  .toString();
+                              final priority = (data['priority'] ?? 'Medium')
+                                  .toString();
+                              final reminderDate = data['reminderDate'];
+
+                              return GestureDetector(
+                                onTap: () {
+                                  // Close this sheet, then open full task
+                                  // detail (which already has edit +
+                                  // mark-complete built in).
+                                  Navigator.pop(sheetContext);
+                                  _showTaskDetail(context, doc.id, data);
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF5F6FA),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 3,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: _priorityBg(priority),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          priority.toUpperCase(),
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700,
+                                            color: _priorityColor(priority),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              title,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13.5,
+                                              ),
+                                            ),
+                                            if (reminderDate != null &&
+                                                reminderDate
+                                                    .toString()
+                                                    .isNotEmpty)
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                  top: 3,
+                                                ),
+                                                child: Text(
+                                                  'Due: $reminderDate',
+                                                  style: const TextStyle(
+                                                    color: _subtitle,
+                                                    fontSize: 11.5,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.chevron_right,
+                                        size: 20,
+                                        color: _subtitle,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _confirmDeleteTask(String taskId, String title) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -560,77 +725,6 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  Widget _attendanceCard() {
-    return FutureBuilder<Map<String, dynamic>>(
-      future: _attendanceFuture,
-      builder: (context, snap) {
-        final present = snap.data?['present'] ?? 0;
-        final total = snap.data?['total'] ?? 0;
-        final prog = total == 0 ? 0.0 : present / total;
-
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Attendance',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: _heading,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '$present / $total days present',
-                style: const TextStyle(fontSize: 12, color: _subtitle),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  const Text(
-                    'Progress',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${(prog * 100).round()}%',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: LinearProgressIndicator(
-                  value: prog,
-                  minHeight: 8,
-                  backgroundColor: const Color(0xFFE5E9F5),
-                  valueColor: const AlwaysStoppedAnimation(Color(0xFF16A34A)),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   Widget _momentumCard({required int activeCount, required double progress}) {
     return Container(
       padding: const EdgeInsets.all(18),
@@ -658,7 +752,9 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            'You have $activeCount active tasks today. Stay focused.',
+            activeCount > 0
+                ? 'You have $activeCount active tasks today. Stay focused.'
+                : 'No active tasks right now. Nice and clear!',
             style: const TextStyle(color: _subtitle, fontSize: 13),
           ),
           const SizedBox(height: 14),
@@ -894,12 +990,16 @@ class _DashboardPageState extends State<DashboardPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _momentumCard(
-                        activeCount: activeDocs.length,
-                        progress: progress,
+                      GestureDetector(
+                        onTap: () =>
+                            _showPendingTasksSheet(context, activeDocs),
+                        child: _momentumCard(
+                          activeCount: activeDocs.length,
+                          progress: progress,
+                        ),
                       ),
-                      const SizedBox(height: 14),
-                      _attendanceCard(),
+                      // const SizedBox(height: 14),
+                      // _attendanceCard(),
                       const SizedBox(height: 14),
                       _priorityCards(
                         criticalCount: criticalCount,
@@ -936,12 +1036,25 @@ class _DashboardPageState extends State<DashboardPage> {
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
-                  _momentumCard(
-                    activeCount: activeDocs.length,
-                    progress: progress,
+                  // ✅ FIX: uses the SAME activeDocs/progress computed above
+                  // from _myTasksStream (this project only), instead of the
+                  // old separate getAllMyTasks() stream. That duplicate
+                  // stream queried across ALL projects (ignoring this one)
+                  // and needed a composite Firestore index it likely didn't
+                  // have — so it silently failed and always fell back to
+                  // activeCount: 0, progress: 0. That's why the bar looked
+                  // static no matter what you did on this screen.
+                  GestureDetector(
+                    onTap: () => _showPendingTasksSheet(context, activeDocs),
+                    child: _momentumCard(
+                      activeCount: activeDocs.length,
+                      progress: progress,
+                    ),
                   ),
-                  _attendanceCard(),
+
                   const SizedBox(height: 14),
+                  // _attendanceCard(),
+                  // const SizedBox(height: 14),
                   _priorityCards(
                     criticalCount: criticalCount,
                     highCount: highCount,

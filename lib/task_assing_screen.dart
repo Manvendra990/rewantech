@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -5,15 +6,18 @@ import 'package:file_picker/file_picker.dart';
 import 'package:rtstrack/services/task_services.dart';
 
 class AssignTaskPage extends StatefulWidget {
-  final String projectId;
-  final String projectName;
+  // Both nullable now: when this page is opened generically (e.g. from the
+  // dashboard's "Assign Task" tile, without a project already in context),
+  // the user picks a project via the on-screen dropdown instead.
+  final String? projectId;
+  final String? projectName;
   final String? taskId; // ✅ edit ke liye
   final Map<String, dynamic>? existingData; // ✅ prefill ke liye
 
   const AssignTaskPage({
     super.key,
-    required this.projectId,
-    required this.projectName,
+    this.projectId,
+    this.projectName,
     this.taskId,
     this.existingData,
   });
@@ -29,6 +33,12 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
   final _taskService = TaskService();
   late final Stream<List<Map<String, dynamic>>> _teammatesStream;
 
+  // Only used when widget.projectId is null — lets the user pick a project
+  // from a dropdown of active/new projects instead of it being preset.
+  late final Stream<QuerySnapshot> _projectsStream;
+  String? _selectedProjectId;
+  String? _selectedProjectName;
+
   DateTime? _reminderDate;
   TimeOfDay? _reminderTime;
   String _priority = 'High';
@@ -43,10 +53,19 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
   static const _subtitle = Color(0xFF6B7280);
   static const _fieldFill = Color(0xFFEDF1FA);
 
+  bool get _projectPreset => widget.projectId != null;
+
   @override
   void initState() {
     super.initState();
     _teammatesStream = _taskService.getTeammates();
+    _projectsStream = FirebaseFirestore.instance
+        .collection('projects')
+        .where('status', whereIn: ['active', 'new', 'testing'])
+        .snapshots();
+
+    _selectedProjectId = widget.projectId;
+    _selectedProjectName = widget.projectName;
 
     // ✅ Edit mode — existing data se prefill
     if (widget.existingData != null) {
@@ -153,11 +172,98 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
     );
   }
 
+  Widget _projectPicker() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Project',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          const SizedBox(height: 6),
+          StreamBuilder<QuerySnapshot>(
+            stream: _projectsStream,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              final projectDocs = snapshot.data!.docs;
+
+              if (projectDocs.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    'No active or new projects found',
+                    style: TextStyle(color: _subtitle, fontSize: 13),
+                  ),
+                );
+              }
+
+              // Guard against a previously-selected project id that's no
+              // longer in this snapshot (status changed, deleted, etc.) —
+              // otherwise DropdownButtonFormField asserts on an unknown value.
+              final validIds = projectDocs.map((d) => d.id).toSet();
+              final dropdownValue = validIds.contains(_selectedProjectId)
+                  ? _selectedProjectId
+                  : null;
+
+              return DropdownButtonFormField<String>(
+                initialValue: dropdownValue,
+                decoration: _decoration('Select a project'),
+                items: projectDocs.map((d) {
+                  final data = d.data() as Map<String, dynamic>;
+                  final name = (data['name'] ?? 'Untitled Project')
+                      .toString();
+                  final status = (data['status'] ?? '').toString();
+                  return DropdownMenuItem(
+                    value: d.id,
+                    child: Text(
+                      status.isNotEmpty ? '$name  ·  $status' : name,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value == null) return;
+                  final doc = projectDocs.firstWhere((d) => d.id == value);
+                  final data = doc.data() as Map<String, dynamic>;
+                  setState(() {
+                    _selectedProjectId = value;
+                    _selectedProjectName = (data['name'] ?? '').toString();
+                  });
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _assignTask() async {
-    if (_titleCtrl.text.trim().isEmpty || _selectedAssignees.isEmpty) {
+    final effectiveProjectId = widget.projectId ?? _selectedProjectId;
+    final effectiveProjectName = widget.projectName ?? _selectedProjectName;
+
+    if (effectiveProjectId == null ||
+        _titleCtrl.text.trim().isEmpty ||
+        _selectedAssignees.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Task title aur kam se kam ek teammate select karo'),
+        SnackBar(
+          content: Text(
+            effectiveProjectId == null
+                ? 'Project select karo, task title aur kam se kam ek teammate'
+                : 'Task title aur kam se kam ek teammate select karo',
+          ),
         ),
       );
       return;
@@ -185,7 +291,7 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
     if (widget.taskId != null) {
       // ✅ Edit mode — update karo
       error = await _taskService.updateTask(
-        projectId: widget.projectId,
+        projectId: effectiveProjectId,
         taskId: widget.taskId!,
         title: _titleCtrl.text,
         description: _descCtrl.text,
@@ -201,8 +307,8 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
     } else {
       // ✅ Create mode
       error = await _taskService.createTask(
-        projectId: widget.projectId,
-        projectName: widget.projectName,
+        projectId: effectiveProjectId,
+        projectName: effectiveProjectName ?? '',
         title: _titleCtrl.text,
         description: _descCtrl.text,
         reminderDate: _reminderDate != null
@@ -238,9 +344,9 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
         backgroundColor: const Color(0xFFF4F5FB),
         elevation: 0,
         iconTheme: const IconThemeData(color: _heading),
-        // 👇 Header me project name dikhao
+        // 👇 Header me project name dikhao (agar preset/select kiya gaya ho)
         title: Text(
-          widget.projectName,
+          widget.projectName ?? _selectedProjectName ?? 'Assign Task',
           style: const TextStyle(
             color: _heading,
             fontWeight: FontWeight.w800,
@@ -270,6 +376,9 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
             style: TextStyle(color: _subtitle, fontSize: 13),
           ),
           const SizedBox(height: 18),
+
+          // ── Project picker (only when not opened from inside a project) ──
+          if (!_projectPreset) ...[_projectPicker(), const SizedBox(height: 16)],
 
           // Task Details Card
           Container(
@@ -626,7 +735,7 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
                       size: 18,
                     ),
               label: Text(
-                widget.taskId != null ? 'Update Task' : 'Assign Task',
+                _loading ? '' : 'Assign Task',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,

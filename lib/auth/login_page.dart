@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:rtstrack/auth/register_page.dart';
-import 'package:rtstrack/dashboard_guide.dart';
+import 'package:rtstrack/dashboard_gride.dart';
 // import 'package:rtstrack/project_screen.dart';
 import 'package:rtstrack/services/auth_services.dart';
 
