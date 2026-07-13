@@ -140,68 +140,68 @@ class _AttendanceHistoryScreenState extends State<EAttendanceHistoryScreen> {
     return '${months[d.month - 1]} ${d.day}, ${d.year}';
   }
 
-  Future<void> _markToday() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+  // Future<void> _markToday() async {
+  //   final uid = FirebaseAuth.instance.currentUser?.uid;
+  //   if (uid == null) return;
 
-    final status = await showModalBottomSheet<String>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Mark today's attendance",
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                ),
-                const SizedBox(height: 8),
-                ListTile(
-                  leading: const Icon(Icons.check_circle, color: _present),
-                  title: const Text('Present'),
-                  onTap: () => Navigator.pop(context, 'present'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.cancel, color: _absent),
-                  title: const Text('Absent'),
-                  onTap: () => Navigator.pop(context, 'absent'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.beach_access, color: _leave),
-                  title: const Text('Leave'),
-                  onTap: () => Navigator.pop(context, 'leave'),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+  //   final status = await showModalBottomSheet<String>(
+  //     context: context,
+  //     shape: const RoundedRectangleBorder(
+  //       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  //     ),
+  //     builder: (context) {
+  //       return SafeArea(
+  //         child: Padding(
+  //           padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+  //           child: Column(
+  //             mainAxisSize: MainAxisSize.min,
+  //             crossAxisAlignment: CrossAxisAlignment.start,
+  //             children: [
+  //               const Text(
+  //                 "Mark today's attendance",
+  //                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+  //               ),
+  //               const SizedBox(height: 8),
+  //               ListTile(
+  //                 leading: const Icon(Icons.check_circle, color: _present),
+  //                 title: const Text('Present'),
+  //                 onTap: () => Navigator.pop(context, 'present'),
+  //               ),
+  //               ListTile(
+  //                 leading: const Icon(Icons.cancel, color: _absent),
+  //                 title: const Text('Absent'),
+  //                 onTap: () => Navigator.pop(context, 'absent'),
+  //               ),
+  //               ListTile(
+  //                 leading: const Icon(Icons.beach_access, color: _leave),
+  //                 title: const Text('Leave'),
+  //                 onTap: () => Navigator.pop(context, 'leave'),
+  //               ),
+  //             ],
+  //           ),
+  //         ),
+  //       );
+  //     },
+  //   );
 
-    if (status == null) return;
+  //   if (status == null) return;
 
-    try {
-      final docId = DateFormat('yyyy-MM-dd').format(_today);
-      await FirebaseFirestore.instance
-          .collection('attendance')
-          .doc(docId)
-          .collection('members')
-          .doc(uid)
-          .set({'status': status});
-      _loadMonth(_focusedMonth);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to save: $e')));
-    }
-  }
+  //   try {
+  //     final docId = DateFormat('yyyy-MM-dd').format(_today);
+  //     await FirebaseFirestore.instance
+  //         .collection('attendance')
+  //         .doc(docId)
+  //         .collection('members')
+  //         .doc(uid)
+  //         .set({'status': status});
+  //     _loadMonth(_focusedMonth);
+  //   } catch (e) {
+  //     if (!mounted) return;
+  //     ScaffoldMessenger.of(
+  //       context,
+  //     ).showSnackBar(SnackBar(content: Text('Failed to save: $e')));
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -221,12 +221,12 @@ class _AttendanceHistoryScreenState extends State<EAttendanceHistoryScreen> {
           style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _markToday,
-        backgroundColor: primary,
-        tooltip: "Mark today's attendance",
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
+      // floatingActionButton: FloatingActionButton(
+      //   onPressed: _markToday,
+      //   backgroundColor: primary,
+      //   tooltip: "Mark today's attendance",
+      //   child: const Icon(Icons.add, color: Colors.white),
+      // ),
       body: SafeArea(
         top: false,
         child: SingleChildScrollView(
