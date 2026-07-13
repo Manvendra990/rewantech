@@ -3,15 +3,12 @@ import 'package:rtstrack/compney_info/employee/attendance_history.dart';
 import 'package:rtstrack/compney_info/customer/customer_screen.dart';
 import 'package:rtstrack/compney_info/employee/team_screen.dart';
 import 'package:rtstrack/compney_info/pament/pament_history.dart';
-// import 'package:rtstrack/dashboard_page.dart';
 import 'package:rtstrack/compney_info/tools/doman_detail.dart';
-import 'package:rtstrack/lead/leads_screen.dart';
 import 'package:rtstrack/profilescreen.dart';
 import 'package:rtstrack/services/auth_services.dart';
 import 'package:rtstrack/auth/login_page.dart';
 import 'package:rtstrack/compney_info/tools/subscription_Details.dart';
-import 'package:rtstrack/compney_info/employee/team_attendance.dart';
-// import 'package:shared_preferences/shared_preferences.dart';
+import 'package:rtstrack/compney_info/pament/office_expense.dart';
 
 class AppDrawer extends StatelessWidget {
   final Map<String, dynamic>? userData;
@@ -87,21 +84,6 @@ class AppDrawer extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
               child: Column(
                 children: [
-                  // _DrawerItem(
-                  //   icon: Icons.show_chart,
-                  //   label: 'DashBoard',
-                  //   onTap: () {
-                  //     // null tha, ab yeh karo
-                  //     Navigator.pop(context);
-                  //     Navigator.push(
-                  //       context,
-                  //       MaterialPageRoute(
-                  //         builder: (_) => const DashboardPage(projectId: '', projectName: '',),
-                  //       ),
-                  //     );
-                  //   },
-                  //   // trailing: Soon wala hata do
-                  // ),
                   _DrawerItem(
                     icon: Icons.person_outline,
                     label: 'Profile',
@@ -113,19 +95,6 @@ class AppDrawer extends StatelessWidget {
                       );
                     },
                   ),
-                  // _DrawerItem(
-                  //   icon: Icons.show_chart,
-                  //   label: 'Leads',
-                  //   onTap: () {
-                  //     // null tha, ab yeh karo
-                  //     Navigator.pop(context);
-                  //     Navigator.push(
-                  //       context,
-                  //       MaterialPageRoute(builder: (_) => const LeadsScreen()),
-                  //     );
-                  //   },
-                  //   // trailing: Soon wala hata do
-                  // ),
                   _DrawerItem(
                     icon: Icons.dashboard_outlined,
                     label: 'Team Board',
@@ -138,21 +107,6 @@ class AppDrawer extends StatelessWidget {
                     },
                   ),
 
-                  // Attendance — sirf admin ko dikhao
-                  // if (_isAdmin)
-                  //   _DrawerItem(
-                  //     icon: Icons.calendar_month_outlined,
-                  //     label: 'Attendance',
-                  //     onTap: () {
-                  //       Navigator.pop(context);
-                  //       Navigator.push(
-                  //         context,
-                  //         MaterialPageRoute(
-                  //           builder: (_) => const AttendanceScreen(),
-                  //         ),
-                  //       );
-                  //     },
-                  //   ),
                   if (_isAdmin)
                     _DrawerItem(
                       icon: Icons.assignment_ind_outlined,
@@ -223,6 +177,19 @@ class AppDrawer extends StatelessWidget {
                         );
                       },
                     ),
+                  _DrawerItem(
+                    icon: Icons.receipt_long_outlined,
+                    label: 'Office Expense',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const OfficeExpensePage(),
+                        ),
+                      );
+                    },
+                  ),
 
                   const Spacer(),
                   const Divider(),

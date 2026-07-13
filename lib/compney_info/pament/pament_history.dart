@@ -1,34 +1,9 @@
-// import 'package:flutter/material.dart';
-
-// class PamentHistory extends StatefulWidget {
-//   const PamentHistory({super.key});
-
-//   @override
-//   State<PamentHistory> createState() => _PamentHistoryState();
-// }
-
-// class _PamentHistoryState extends State<PamentHistory> {
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(title: const Text('Project Screen')),
-//       body: const Center(child: Text('Project Screen Content')),
-//     );
-//   }
-// }
+ 
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-// ---------------------------------------------------------------------------
-// MODEL
-// ---------------------------------------------------------------------------
-
-/// A single logged payment transaction, stored in the top-level `payments`
-/// collection. This is separate from the `services` / `dealDetails` data
-/// embedded on a Customer doc — it's the actual running ledger of money
-/// received (or refunded), so a history view can show/filter/search it
-/// without touching the customer record itself.
+ 
 class PaymentRecord {
   final String docId;
   final String customerId;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class OfficeExpensePage extends StatefulWidget {
   const OfficeExpensePage({super.key});
@@ -15,12 +16,57 @@ class _OfficeExpensePageState extends State<OfficeExpensePage> {
   static const _primary = Color(0xFF2F6FED);
   static const _fieldFill = Color(0xFFEDF1FA);
 
+  // Sentinel value used for the "Other" dropdown entry — kept distinct from
+  // any real Firestore project id.
+  static const _otherValue = '__other__';
+
   final _expensesRef = FirebaseFirestore.instance.collection('office_expenses');
+  final _projectsRef = FirebaseFirestore.instance.collection('projects');
+  final _firestore = FirebaseFirestore.instance;
 
   final _amountCtrl = TextEditingController();
   final _usedForCtrl = TextEditingController();
+  final _otherProjectCtrl = TextEditingController();
+
   DateTime _selectedDate = DateTime.now();
   bool _saving = false;
+
+  // Selected dropdown value: either a real project doc id, or _otherValue.
+  String? _selectedProjectId;
+  String _selectedProjectName = '';
+
+  String? _uid;
+  String? _userRole;
+  String _userName = '';
+  bool get _isAdmin => _userRole == 'Admin';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    final uid = prefs.getString('uid');
+    if (uid == null) return;
+
+    final doc = await _firestore.collection('registration').doc(uid).get();
+    if (!mounted) return;
+    setState(() {
+      _uid = uid;
+      _userRole = doc.data()?['role'] ?? '';
+      _userName = doc.data()?['name'] ?? '';
+    });
+  }
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _usedForCtrl.dispose();
+    _otherProjectCtrl.dispose();
+    super.dispose();
+  }
 
   InputDecoration _decoration({required String hint, required IconData icon}) {
     return InputDecoration(
@@ -40,11 +86,27 @@ class _OfficeExpensePageState extends State<OfficeExpensePage> {
   Future<void> _addExpense() async {
     final amountText = _amountCtrl.text.trim();
     final usedFor = _usedForCtrl.text.trim();
+    final isOther = _selectedProjectId == _otherValue;
+    final otherProjectName = _otherProjectCtrl.text.trim();
 
     if (amountText.isEmpty || usedFor.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Amount aur Used For bharo')),
       );
+      return;
+    }
+
+    if (_selectedProjectId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Project select karo')));
+      return;
+    }
+
+    if (isOther && otherProjectName.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Project ka naam likho')));
       return;
     }
 
@@ -62,12 +124,20 @@ class _OfficeExpensePageState extends State<OfficeExpensePage> {
         'amount': amount,
         'usedFor': usedFor,
         'date': Timestamp.fromDate(_selectedDate),
+        // Store null projectId for "Other" since it isn't a real project doc.
+        'projectId': isOther ? null : _selectedProjectId,
+        'projectName': isOther ? otherProjectName : _selectedProjectName,
+        'addedByUid': _uid,
+        'addedByName': _userName.isNotEmpty ? _userName : 'Unknown',
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       _amountCtrl.clear();
       _usedForCtrl.clear();
+      _otherProjectCtrl.clear();
       _selectedDate = DateTime.now();
+      _selectedProjectId = null;
+      _selectedProjectName = '';
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -101,6 +171,11 @@ class _OfficeExpensePageState extends State<OfficeExpensePage> {
   }
 
   void _showAddExpenseSheet() {
+    // Reset selection state for a fresh sheet each time.
+    _selectedProjectId = null;
+    _selectedProjectName = '';
+    _otherProjectCtrl.clear();
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -140,6 +215,94 @@ class _OfficeExpensePageState extends State<OfficeExpensePage> {
                 ),
               ),
               const SizedBox(height: 18),
+
+              // ── Project dropdown ─────────────────────────────
+              StreamBuilder<QuerySnapshot>(
+                stream: _projectsRef.orderBy('name').snapshots(),
+                builder: (context, snapshot) {
+                  final projectDocs = snapshot.data?.docs ?? [];
+
+                  // Build dropdown items: each real project, then "Other"
+                  // at the very end of the list.
+                  final items = <DropdownMenuItem<String>>[
+                    ...projectDocs.map((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      final name =
+                          (data['name'] ??
+                                  data['projectName'] ??
+                                  'Untitled Project')
+                              .toString();
+                      return DropdownMenuItem<String>(
+                        value: doc.id,
+                        child: Text(name, overflow: TextOverflow.ellipsis),
+                      );
+                    }),
+                    const DropdownMenuItem<String>(
+                      value: _otherValue,
+                      child: Text('Other'),
+                    ),
+                  ];
+
+                  // If a previously selected id no longer exists in the
+                  // stream (e.g. still loading), fall back to null so the
+                  // DropdownButtonFormField doesn't crash on an invalid value.
+                  final validIds = {
+                    ...projectDocs.map((d) => d.id),
+                    _otherValue,
+                  };
+                  final currentValue = validIds.contains(_selectedProjectId)
+                      ? _selectedProjectId
+                      : null;
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        initialValue: currentValue,
+                        decoration: _decoration(
+                          hint:
+                              snapshot.connectionState ==
+                                  ConnectionState.waiting
+                              ? 'Loading projects...'
+                              : 'Select Project',
+                          icon: Icons.folder_outlined,
+                        ),
+                        items: items,
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setSheetState(() {
+                            _selectedProjectId = value;
+                            if (value == _otherValue) {
+                              _selectedProjectName = '';
+                            } else {
+                              final match = projectDocs.firstWhere(
+                                (d) => d.id == value,
+                              );
+                              final data = match.data() as Map<String, dynamic>;
+                              _selectedProjectName =
+                                  (data['name'] ??
+                                          data['projectName'] ??
+                                          'Untitled Project')
+                                      .toString();
+                            }
+                          });
+                        },
+                      ),
+                      if (_selectedProjectId == _otherValue) ...[
+                        const SizedBox(height: 14),
+                        TextField(
+                          controller: _otherProjectCtrl,
+                          decoration: _decoration(
+                            hint: 'Enter project name',
+                            icon: Icons.edit_outlined,
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 14),
 
               TextField(
                 controller: _amountCtrl,
@@ -208,7 +371,15 @@ class _OfficeExpensePageState extends State<OfficeExpensePage> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: _saving ? null : _addExpense,
+                  onPressed: _saving
+                      ? null
+                      : () async {
+                          await _addExpense();
+                          // Reflect any reset state (e.g. cleared controllers)
+                          // back into the sheet's own setState scope, in case
+                          // the sheet is still open (e.g. validation failed).
+                          setSheetState(() {});
+                        },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _primary,
                     elevation: 0,
@@ -257,6 +428,18 @@ class _OfficeExpensePageState extends State<OfficeExpensePage> {
       body: StreamBuilder<QuerySnapshot>(
         stream: _expensesRef.orderBy('date', descending: true).snapshots(),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Error loading expenses:\n${snapshot.error}',
+                  style: const TextStyle(color: Colors.red),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -327,6 +510,8 @@ class _OfficeExpensePageState extends State<OfficeExpensePage> {
                           final amount =
                               (data['amount'] as num?)?.toDouble() ?? 0;
                           final usedFor = data['usedFor'] ?? '';
+                          final projectName = data['projectName'] ?? '';
+                          final addedByName = data['addedByName'] ?? '';
                           final date = (data['date'] as Timestamp?)?.toDate();
 
                           return Container(
@@ -374,6 +559,21 @@ class _OfficeExpensePageState extends State<OfficeExpensePage> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       const SizedBox(height: 2),
+                                      if (projectName.toString().isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 2,
+                                          ),
+                                          child: Text(
+                                            projectName,
+                                            style: const TextStyle(
+                                              fontSize: 11.5,
+                                              color: _primary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
                                       Text(
                                         date != null
                                             ? DateFormat(
@@ -385,6 +585,32 @@ class _OfficeExpensePageState extends State<OfficeExpensePage> {
                                           color: _subtitle,
                                         ),
                                       ),
+                                      if (addedByName
+                                          .toString()
+                                          .isNotEmpty) ...[
+                                        const SizedBox(height: 2),
+                                        Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.person_outline,
+                                              size: 11,
+                                              color: _subtitle,
+                                            ),
+                                            const SizedBox(width: 3),
+                                            Flexible(
+                                              child: Text(
+                                                'Added by $addedByName',
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: _subtitle,
+                                                  fontStyle: FontStyle.italic,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -396,15 +622,18 @@ class _OfficeExpensePageState extends State<OfficeExpensePage> {
                                     color: _heading,
                                   ),
                                 ),
-                                const SizedBox(width: 6),
-                                GestureDetector(
-                                  onTap: () => _confirmDelete(doc.id, usedFor),
-                                  child: const Icon(
-                                    Icons.delete_outline,
-                                    color: Colors.red,
-                                    size: 20,
+                                if (_isAdmin) ...[
+                                  const SizedBox(width: 6),
+                                  GestureDetector(
+                                    onTap: () =>
+                                        _confirmDelete(doc.id, usedFor),
+                                    child: const Icon(
+                                      Icons.delete_outline,
+                                      color: Colors.red,
+                                      size: 20,
+                                    ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           );

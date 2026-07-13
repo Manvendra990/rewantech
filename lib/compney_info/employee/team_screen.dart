@@ -217,8 +217,8 @@ class _TeamScreenState extends State<TeamScreen> {
                       ? Center(
                           child: Text(
                             allMembers.isEmpty
-                                ? 'Team members nahi mile'
-                                : 'Koi match nahi mila',
+                                ? 'No members right now...'
+                                : 'No matching available...',
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,

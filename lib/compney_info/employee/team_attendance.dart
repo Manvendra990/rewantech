@@ -77,9 +77,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     setState(() => _saving = false);
 
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Attendance save ho gayi ✅')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Attendance saved successfully ✅')),
+    );
+    Navigator.pop(context, true);
   }
 
   // Sab members ko ek saath present/absent mark karne ke liye

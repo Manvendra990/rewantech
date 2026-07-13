@@ -93,47 +93,39 @@ class TaskService {
       String attachmentUrl = '';
       String attachmentName = '';
 
-      // if (attachmentFile != null && attachmentFile.bytes != null) {
-      //   final ref = _storage
-      //       .ref()
-      //       .child('attachments')
-      //       .child(projectId)
-      //       .child(
-      //         '${DateTime.now().millisecondsSinceEpoch}_${attachmentFile.name}',
-      //       );
+      final projectRef = _firestore.collection('projects').doc(projectId);
+      final taskRef = projectRef.collection('tasks').doc(); // pre-generate ID
 
-      //   // final uploadTask = await ref.putData(
-      //   //   attachmentFile.bytes!,
-      //   //   SettableMetadata(contentType: _getContentType(attachmentFile.name)),
-      //   // );
+      await _firestore.runTransaction((transaction) async {
+        final projectSnap = await transaction.get(projectRef);
+        final projectData = projectSnap.data();
+        final currentStatus = projectData?['status'];
 
-      //   attachmentUrl = await uploadTask.ref.getDownloadURL();
-      //   attachmentName = attachmentFile.name;
-      // }
+        // ✅ Sirf 'new' status ko 'active' me badlo — kisi aur status ko touch mat karo
+        if (currentStatus == 'new') {
+          transaction.update(projectRef, {'status': 'active'});
+        }
 
-      final docRef = await _firestore
-          .collection('projects')
-          .doc(projectId)
-          .collection('tasks')
-          .add({
-            'title': title.trim(),
-            'description': description.trim(),
-            'reminderDate': reminderDate,
-            'reminderTime': reminderTime,
-            'priority': priority,
-            'assignedToUids': assignees.map((a) => a['uid']).toList(),
-            'assignedToNames': assignees.map((a) => a['name']).toList(),
-            'assignedByUid': currentUid,
-            'status': 'pending',
-            'projectName': projectName,
-            'attachmentName': attachmentName, // ✅ file name
-            'attachmentUrl': attachmentUrl, // ✅ download URL
-            'createdAt': FieldValue.serverTimestamp(),
-          });
+        transaction.set(taskRef, {
+          'title': title.trim(),
+          'description': description.trim(),
+          'reminderDate': reminderDate,
+          'reminderTime': reminderTime,
+          'priority': priority,
+          'assignedToUids': assignees.map((a) => a['uid']).toList(),
+          'assignedToNames': assignees.map((a) => a['name']).toList(),
+          'assignedByUid': currentUid,
+          'status': 'pending',
+          'projectName': projectName,
+          'attachmentName': attachmentName, // ✅ file name
+          'attachmentUrl': attachmentUrl, // ✅ download URL
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      });
 
       if (reminderDateTime != null) {
         await AlarmHelper.scheduleTaskAlarm(
-          taskId: docRef.id,
+          taskId: taskRef.id,
           title: title.trim(),
           dateTime: reminderDateTime,
         );
