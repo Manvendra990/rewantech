@@ -28,6 +28,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
 
   String? _currentUid;
   String? _currentName;
+  String? _currentRole;
   List<Map<String, dynamic>> _teammates = [];
   List<String> _mentionSuggestions = [];
   bool _showMentions = false;
@@ -44,6 +45,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
 
   static const _heading = Color(0xFF111827);
   static const _subtitle = Color(0xFF6B7280);
+  bool get _isAdmin => _currentRole == 'admin';
 
   @override
   void initState() {
@@ -97,6 +99,14 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
       _currentUid = uid;
       _currentName = name;
     });
+
+    if (uid != null) {
+      final doc = await _firestore.collection('registration').doc(uid).get();
+      if (!mounted) return;
+      setState(() {
+        _currentRole = doc.data()?['role'];
+      });
+    }
   }
 
   Future<void> _loadTeammates() async {
@@ -329,11 +339,12 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined, color: _heading),
-            tooltip: 'Edit task',
-            onPressed: _openEditPage,
-          ),
+          if (_isAdmin)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, color: _heading),
+              tooltip: 'Edit task',
+              onPressed: _openEditPage,
+            ),
         ],
       ),
       body: SafeArea(
@@ -406,7 +417,7 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
                             ),
                             const Spacer(),
                             // ── Complete icon button (sirf jab task pending ho) ──
-                            if (_status != 'completed')
+                            if (_status != 'completed' && _isAdmin)
                               GestureDetector(
                                 onTap: _completing ? null : _markComplete,
                                 child: Container(

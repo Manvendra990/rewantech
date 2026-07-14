@@ -286,9 +286,9 @@ class _DashboardGridScreenState extends State<DashboardGridScreen> {
           icon: Icons.how_to_reg_outlined,
           label: 'Attendance',
           subtitle: 'Mark Presence',
-          // Live "present/total", shown beside the icon (not as the
-          // subtitle) — X = today's attendance/{yyyy-MM-dd}/members docs
-          // with status == 'present', Y = total registered employees.
+          // Live "present/total", shown vertically centered on the right
+          // edge of the tile — X = today's attendance/{yyyy-MM-dd}/members
+          // docs with status == 'present', Y = total registered employees.
           // Present count is highlighted in green.
           iconTrailingBuilder: (context) {
             final todayStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
@@ -576,10 +576,10 @@ class _DashboardGridScreenState extends State<DashboardGridScreen> {
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: items.length,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
+                  crossAxisCount: 2,
                   mainAxisSpacing: 14,
                   crossAxisSpacing: 14,
-                  childAspectRatio: 0.82,
+                  childAspectRatio: 2,
                 ),
                 itemBuilder: (context, index) {
                   return _DashboardCard(item: items[index]);
@@ -642,8 +642,8 @@ class _DashboardItem {
   // Optional override to render a dynamic subtitle (e.g. a live
   // "3/12 present" string) instead of the static `subtitle` text.
   final Widget Function(BuildContext context)? subtitleBuilder;
-  // Optional widget shown to the right of the icon (same row), e.g. a
-  // live "3/12" present count.
+  // Optional widget shown vertically centered against the right edge of
+  // the tile (overlaid via Stack), e.g. a live "3/12" present count.
   final Widget Function(BuildContext context)? iconTrailingBuilder;
 
   _DashboardItem({
@@ -681,70 +681,86 @@ class _DashboardCard extends StatelessWidget {
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10),
+              // Reserve space on the right so the title/subtitle text
+              // doesn't run underneath the vertically-centered trailing
+              // count (see Positioned below).
+              Padding(
+                padding: EdgeInsets.only(
+                  right: item.iconTrailingBuilder != null ? 46 : 0,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ── Icon + Title in the same row (icon in front) ──
+                    Row(
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(item.icon, color: primary, size: 15),
                         ),
-                        child: Icon(item.icon, color: primary, size: 18),
-                      ),
-                      if (item.iconTrailingBuilder != null) ...[
-                        const Spacer(),
-                        item.iconTrailingBuilder!(context),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: item.totalStream == null
+                              ? Text(
+                                  item.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                )
+                              : StreamBuilder<int>(
+                                  stream: item.totalStream,
+                                  builder: (context, snapshot) {
+                                    final total = snapshot.data;
+                                    final text = total != null
+                                        ? '${item.label} ($total)'
+                                        : item.label;
+                                    return Text(
+                                      text,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
                       ],
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  item.totalStream == null
-                      ? Text(
-                          item.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
+                    ),
+                    const SizedBox(height: 6),
+                    item.subtitleBuilder != null
+                        ? item.subtitleBuilder!(context)
+                        : Text(
+                            item.subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: Colors.grey.shade600,
+                            ),
                           ),
-                        )
-                      : StreamBuilder<int>(
-                          stream: item.totalStream,
-                          builder: (context, snapshot) {
-                            final total = snapshot.data;
-                            final text = total != null
-                                ? '${item.label}    ($total)'
-                                : item.label;
-                            return Text(
-                              text,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            );
-                          },
-                        ),
-                  const SizedBox(height: 2),
-                  item.subtitleBuilder != null
-                      ? item.subtitleBuilder!(context)
-                      : Text(
-                          item.subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                ],
+                  ],
+                ),
               ),
+              // ── Live X/Y count: vertically centered, pinned to the
+              // right edge of the tile ──
+              if (item.iconTrailingBuilder != null)
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  right: 4,
+                  child: Center(child: item.iconTrailingBuilder!(context)),
+                ),
               if (item.countStream != null)
                 Positioned(
                   top: -6,

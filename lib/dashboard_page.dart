@@ -33,7 +33,7 @@ class _DashboardPageState extends State<DashboardPage> {
   // int _navIndex = 0;
   Map<String, dynamic>? _userData;
 
-  late final Stream<QuerySnapshot> _myTasksStream;
+  Stream<QuerySnapshot>? _tasksStream;
   late final Stream<List<Map<String, dynamic>>> _teammatesStream;
   late Future<Map<String, dynamic>> _attendanceFuture;
   static const _heading = Color(0xFF111827);
@@ -41,13 +41,15 @@ class _DashboardPageState extends State<DashboardPage> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   final _leadNotifService = LeadNotificationService();
 
+  // ✅ Admin check — same pattern used across the app (ProjectScreen, etc.)
+  bool get _isAdmin =>
+      (_userData?['role'] ?? '').toString().toLowerCase() == 'admin';
+
   @override
   void initState() {
     super.initState();
     AlarmHelper.requestPermissions();
     _loadUser();
-    // 👇 projectId pass karo taaki sirf is project ke tasks aayein
-    _myTasksStream = _taskService.getMyTasks(widget.projectId);
     _teammatesStream = _taskService.getTeammates();
     _attendanceFuture = _taskService.getMyAttendanceSummary();
   }
@@ -62,7 +64,20 @@ class _DashboardPageState extends State<DashboardPage> {
 
       await prefs.setString('name', data?['name'] ?? ''); // ✅ yeh add karo
 
-      setState(() => _userData = data);
+      setState(() {
+        _userData = data;
+        // ✅ Admin sees ALL pending tasks in this project (no assignee
+        // filter). Non-admins only see tasks assigned to them, same as
+        // before.
+        _tasksStream = _isAdmin
+            ? FirebaseFirestore.instance
+                  .collection('projects')
+                  .doc(widget.projectId)
+                  .collection('tasks')
+                  .orderBy('createdAt', descending: true)
+                  .snapshots()
+            : _taskService.getMyTasks(widget.projectId);
+      });
     }
   }
 
@@ -274,27 +289,28 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                 ),
                 const Spacer(),
-                // Edit button
-                GestureDetector(
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => AssignTaskPage(
-                          projectId: widget.projectId,
-                          projectName: widget.projectName,
-                          taskId: taskId, // ✅ pass karo
-                          existingData: data, // ✅ pass karo
+                // Edit button — admin only
+                if (_isAdmin)
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AssignTaskPage(
+                            projectId: widget.projectId,
+                            projectName: widget.projectName,
+                            taskId: taskId, // ✅ pass karo
+                            existingData: data, // ✅ pass karo
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                  child: const Icon(
-                    Icons.edit_outlined,
-                    color: Color(0xFF2F6FED),
+                      );
+                    },
+                    child: const Icon(
+                      Icons.edit_outlined,
+                      color: Color(0xFF2F6FED),
+                    ),
                   ),
-                ),
               ],
             ),
             const SizedBox(height: 14),
@@ -486,8 +502,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
             const SizedBox(height: 20),
 
-            // Mark complete — sirf pending tasks ke liye dikhao
-            if (status == 'pending')
+            // Mark complete — sirf pending tasks ke liye, aur sirf admin ko
+            if (status == 'pending' && _isAdmin)
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -953,9 +969,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: _myTasksStream,
+            stream: _tasksStream,
             builder: (context, snapshot) {
-              if (!snapshot.hasData) {
+              if (_tasksStream == null || !snapshot.hasData) {
                 return const Padding(
                   padding: EdgeInsets.all(16),
                   child: Center(child: CircularProgressIndicator()),

@@ -581,16 +581,21 @@ class _MemberTasksSheetState extends State<_MemberTasksSheet>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        title: Text(
-          widget.name,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: _heading,
+        toolbarHeight: 90,
+        title: Padding(
+          padding: const EdgeInsets.only(top: 60),
+          child: Text(
+            "Task List",
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: _heading,
+            ),
           ),
         ),
       ),
@@ -615,7 +620,7 @@ class _MemberTasksSheetState extends State<_MemberTasksSheet>
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+
                   Row(
                     children: [
                       CircleAvatar(

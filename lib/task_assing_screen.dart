@@ -222,8 +222,7 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
                 decoration: _decoration('Select a project'),
                 items: projectDocs.map((d) {
                   final data = d.data() as Map<String, dynamic>;
-                  final name = (data['name'] ?? 'Untitled Project')
-                      .toString();
+                  final name = (data['name'] ?? 'Untitled Project').toString();
                   final status = (data['status'] ?? '').toString();
                   return DropdownMenuItem(
                     value: d.id,
@@ -378,7 +377,10 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
           const SizedBox(height: 18),
 
           // ── Project picker (only when not opened from inside a project) ──
-          if (!_projectPreset) ...[_projectPicker(), const SizedBox(height: 16)],
+          if (!_projectPreset) ...[
+            _projectPicker(),
+            const SizedBox(height: 16),
+          ],
 
           // Task Details Card
           Container(
@@ -729,13 +731,17 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
                         strokeWidth: 2,
                       ),
                     )
-                  : const Icon(
-                      Icons.assignment_turned_in_outlined,
+                  : Icon(
+                      widget.taskId != null
+                          ? Icons.edit_outlined
+                          : Icons.assignment_turned_in_outlined,
                       color: Colors.white,
                       size: 18,
                     ),
               label: Text(
-                _loading ? '' : 'Assign Task',
+                _loading
+                    ? ''
+                    : (widget.taskId != null ? 'Update Task' : 'Assign Task'),
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
