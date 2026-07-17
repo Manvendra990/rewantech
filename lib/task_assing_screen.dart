@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:rtstrack/services/task_services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AssignTaskPage extends StatefulWidget {
   // Both nullable now: when this page is opened generically (e.g. from the
@@ -32,6 +33,7 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
   final _searchCtrl = TextEditingController();
   final _taskService = TaskService();
   late final Stream<List<Map<String, dynamic>>> _teammatesStream;
+  String? _currentUid;
 
   // Only used when widget.projectId is null — lets the user pick a project
   // from a dropdown of active/new projects instead of it being preset.
@@ -54,6 +56,13 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
   static const _fieldFill = Color(0xFFEDF1FA);
 
   bool get _projectPreset => widget.projectId != null;
+  Future<void> _loadCurrentUid() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _currentUid = prefs.getString('uid');
+    });
+  }
 
   @override
   void initState() {
@@ -66,6 +75,7 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
 
     _selectedProjectId = widget.projectId;
     _selectedProjectName = widget.projectName;
+    _loadCurrentUid();
 
     // ✅ Edit mode — existing data se prefill
     if (widget.existingData != null) {
@@ -623,8 +633,22 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
                           (m) => m['name'].toLowerCase().contains(_searchQuery),
                         )
                         .toList();
+
+                    // ✅ Selected teammates float to the top. Uses a stable sort (Dart's
+                    // List.sort is stable for equal comparisons... actually List.sort in
+                    // Dart is NOT guaranteed stable, so we do this manually to be safe).
+                    final selectedMembers = teammates
+                        .where((m) => _selectedAssignees.containsKey(m['uid']))
+                        .toList();
+                    final unselectedMembers = teammates
+                        .where((m) => !_selectedAssignees.containsKey(m['uid']))
+                        .toList();
+                    final sortedTeammates = [
+                      ...selectedMembers,
+                      ...unselectedMembers,
+                    ];
                     return Column(
-                      children: teammates.map((member) {
+                      children: sortedTeammates.map((member) {
                         final selected = _selectedAssignees.containsKey(
                           member['uid'],
                         );
@@ -694,6 +718,36 @@ class _AssignTaskPageState extends State<AssignTaskPage> {
                                     ],
                                   ),
                                 ),
+                                if (member['uid'] ==
+                                    _currentUid) // 👈 add this block
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color.fromARGB(
+                                          255,
+                                          33,
+                                          33,
+                                          33,
+                                        ), // Background color
+                                        borderRadius: BorderRadius.circular(
+                                          12,
+                                        ), // Radius
+                                      ),
+                                      child: const Text(
+                                        'You',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white, // Text color
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 if (selected)
                                   const CircleAvatar(
                                     radius: 10,

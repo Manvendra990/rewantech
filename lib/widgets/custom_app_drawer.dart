@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:rtstrack/compney_info/customer/customer_detail_screen.dart';
 import 'package:rtstrack/compney_info/employee/attendance_history.dart';
-import 'package:rtstrack/compney_info/customer/customer_screen.dart';
+// import 'package:rtstrack/compney_info/customer/customer_screen.dart';
 import 'package:rtstrack/compney_info/employee/team_screen.dart';
 import 'package:rtstrack/compney_info/pament/pament_history.dart';
 import 'package:rtstrack/compney_info/tools/doman_detail.dart';

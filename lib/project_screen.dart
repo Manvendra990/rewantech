@@ -4,7 +4,13 @@ import 'package:rtstrack/dashboard_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ProjectScreen extends StatefulWidget {
-  const ProjectScreen({super.key});
+  // Lets callers (e.g. the dashboard's "Active Projects" stat card) open
+  // this screen with a status filter already applied, instead of always
+  // landing on 'all'. Defaults to 'all' to preserve existing behavior for
+  // every other place ProjectScreen() is already called without arguments.
+  final String initialStatusFilter;
+
+  const ProjectScreen({super.key, this.initialStatusFilter = 'all'});
 
   @override
   State<ProjectScreen> createState() => _ProjectScreenState();
@@ -21,7 +27,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
 
   final _searchController = TextEditingController();
   String _searchQuery = '';
-  String _selectedStatusFilter = 'all';
+  late String _selectedStatusFilter;
 
   static const _bg = Color(0xFFF0F4FF);
   static const _heading = Color(0xFF111827);
@@ -50,6 +56,7 @@ class _ProjectScreenState extends State<ProjectScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedStatusFilter = widget.initialStatusFilter;
     _loadUser();
   }
 
@@ -314,10 +321,10 @@ class _ProjectScreenState extends State<ProjectScreen> {
     final dt = ts.toDate();
     final diff = now.difference(dt);
 
-    if (diff.inMinutes < 60) return 'Modified ${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return 'Modified ${diff.inHours}h ago';
-    if (diff.inDays == 1) return 'Modified yesterday';
-    return 'Modified ${diff.inDays}d ago';
+    if (diff.inMinutes < 60) return 'Created at ${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return 'Created at ${diff.inHours}h ago';
+    if (diff.inDays == 1) return 'Created at yesterday';
+    return 'Created at ${diff.inDays}d ago';
   }
 
   @override

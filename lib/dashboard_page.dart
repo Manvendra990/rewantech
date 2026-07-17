@@ -66,9 +66,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
       setState(() {
         _userData = data;
-        // ✅ Admin sees ALL pending tasks in this project (no assignee
-        // filter). Non-admins only see tasks assigned to them, same as
-        // before.
+        // ✅ Admin sees ALL tasks in this project (no assignee filter).
+        // Non-admins only see tasks assigned to them, same as before.
         _tasksStream = _isAdmin
             ? FirebaseFirestore.instance
                   .collection('projects')
@@ -544,14 +543,19 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // ---------------------------------------------------------------------
-  // Pending tasks bottom sheet (opened by tapping the Daily Momentum card)
-  // Reuses _showTaskDetail for full detail / edit / mark-complete, so we
-  // don't duplicate that logic here.
+  // Project task list bottom sheet — shared by the "Completed"/"Active"
+  // buttons, the Daily Momentum card, and the Critical/High priority
+  // cards. `docs` should already be filtered to whatever subset the
+  // caller wants shown; `title`/`emptyMessage` adapt the header + empty
+  // state. Reuses _showTaskDetail for full detail / edit / mark-complete,
+  // so we don't duplicate that logic here.
   // ---------------------------------------------------------------------
-  void _showPendingTasksSheet(
+  void _showTasksSheet(
     BuildContext context,
-    List<QueryDocumentSnapshot> pendingDocs,
-  ) {
+    List<QueryDocumentSnapshot> docs, {
+    required String title,
+    required String emptyMessage,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -583,7 +587,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                   ),
                   Text(
-                    'Pending Tasks (${pendingDocs.length})',
+                    '$title (${docs.length})',
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
@@ -592,11 +596,11 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                   const SizedBox(height: 12),
                   Expanded(
-                    child: pendingDocs.isEmpty
-                        ? const Center(
+                    child: docs.isEmpty
+                        ? Center(
                             child: Text(
-                              'No pending tasks 🎉',
-                              style: TextStyle(
+                              emptyMessage,
+                              style: const TextStyle(
                                 color: _subtitle,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -604,17 +608,20 @@ class _DashboardPageState extends State<DashboardPage> {
                           )
                         : ListView.separated(
                             controller: scrollController,
-                            itemCount: pendingDocs.length,
+                            itemCount: docs.length,
                             separatorBuilder: (_, __) =>
                                 const SizedBox(height: 10),
                             itemBuilder: (context, index) {
-                              final doc = pendingDocs[index];
+                              final doc = docs[index];
                               final data = doc.data() as Map<String, dynamic>;
-                              final title = (data['title'] ?? 'Untitled Task')
-                                  .toString();
+                              final taskTitle =
+                                  (data['title'] ?? 'Untitled Task')
+                                      .toString();
                               final priority = (data['priority'] ?? 'Medium')
                                   .toString();
                               final reminderDate = data['reminderDate'];
+                              final isCompleted =
+                                  data['status'] == 'completed';
 
                               return GestureDetector(
                                 onTap: () {
@@ -659,7 +666,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              title,
+                                              taskTitle,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
@@ -686,10 +693,14 @@ class _DashboardPageState extends State<DashboardPage> {
                                           ],
                                         ),
                                       ),
-                                      const Icon(
-                                        Icons.chevron_right,
-                                        size: 20,
-                                        color: _subtitle,
+                                      Icon(
+                                        isCompleted
+                                            ? Icons.check_circle
+                                            : Icons.chevron_right,
+                                        size: isCompleted ? 18 : 20,
+                                        color: isCompleted
+                                            ? const Color(0xFF16A34A)
+                                            : _subtitle,
                                       ),
                                     ],
                                   ),
@@ -704,6 +715,70 @@ class _DashboardPageState extends State<DashboardPage> {
           },
         );
       },
+    );
+  }
+
+  // ── Completed / Active toggle buttons shown above the task list ──
+  Widget _taskStatusButtons({
+    required List<QueryDocumentSnapshot> completedDocs,
+    required List<QueryDocumentSnapshot> activeDocs,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: () => _showTasksSheet(
+              context,
+              completedDocs,
+              title: 'Completed Tasks',
+              emptyMessage: 'No completed tasks yet',
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 11),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFFDCFCE7),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'Completed (${completedDocs.length})',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF16A34A),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: GestureDetector(
+            onTap: () => _showTasksSheet(
+              context,
+              activeDocs,
+              title: 'Active Tasks',
+              emptyMessage: 'No pending tasks 🎉',
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 11),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE3EBFD),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'Active (${activeDocs.length})',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF2F6FED),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -805,65 +880,87 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _priorityCards({required int criticalCount, required int highCount}) {
+  // ✅ Now takes the actual doc lists (not just counts) and is tappable —
+  // tapping Critical or High opens the same bottom sheet used everywhere
+  // else on this page, filtered to that priority.
+  Widget _priorityCards({
+    required List<QueryDocumentSnapshot> criticalDocs,
+    required List<QueryDocumentSnapshot> highDocs,
+  }) {
     return Row(
       children: [
         Expanded(
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFDE2E6),
-              borderRadius: BorderRadius.circular(16),
+          child: GestureDetector(
+            onTap: () => _showTasksSheet(
+              context,
+              criticalDocs,
+              title: 'Critical Tasks',
+              emptyMessage: 'No critical tasks 🎉',
             ),
-            child: Column(
-              children: [
-                Text(
-                  '$criticalCount',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFFE11D48),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFDE2E6),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    '${criticalDocs.length}',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFFE11D48),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Critical',
-                  style: TextStyle(
-                    color: Color(0xFFE11D48),
-                    fontWeight: FontWeight.w600,
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Critical',
+                    style: TextStyle(
+                      color: Color(0xFFE11D48),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
         const SizedBox(width: 14),
         Expanded(
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE3EBFD),
-              borderRadius: BorderRadius.circular(16),
+          child: GestureDetector(
+            onTap: () => _showTasksSheet(
+              context,
+              highDocs,
+              title: 'High Priority Tasks',
+              emptyMessage: 'No high priority tasks 🎉',
             ),
-            child: Column(
-              children: [
-                Text(
-                  '$highCount',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF2F6FED),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE3EBFD),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    '${highDocs.length}',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF2F6FED),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'High',
-                  style: TextStyle(
-                    color: Color(0xFF2F6FED),
-                    fontWeight: FontWeight.w600,
+                  const SizedBox(height: 4),
+                  const Text(
+                    'High',
+                    style: TextStyle(
+                      color: Color(0xFF2F6FED),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -985,20 +1082,32 @@ class _DashboardPageState extends State<DashboardPage> {
                 return data['status'] == 'pending'; // ✅ active → pending
               }).toList();
 
+              // Used by the "Completed" button + sheet above the task
+              // list. Filtered on the exact 'completed' status (rather
+              // than "everything that isn't pending") so the sheet only
+              // ever shows genuinely completed tasks for this project.
+              final completedDocs = allDocs.where((d) {
+                final data = d.data() as Map<String, dynamic>;
+                return data['status'] == 'completed';
+              }).toList();
+
               final completedCount = allDocs.length - activeDocs.length;
               final progress = allDocs.isEmpty
                   ? 0.0
                   : completedCount / allDocs.length;
 
-              final criticalCount = activeDocs.where((d) {
+              // ✅ Now kept as doc lists (not just counts) so the priority
+              // cards can open the bottom sheet with the exact matching
+              // tasks.
+              final criticalDocs = activeDocs.where((d) {
                 final data = d.data() as Map<String, dynamic>;
                 return data['priority'] == 'Critical';
-              }).length;
+              }).toList();
 
-              final highCount = activeDocs.where((d) {
+              final highDocs = activeDocs.where((d) {
                 final data = d.data() as Map<String, dynamic>;
                 return data['priority'] == 'High';
-              }).length;
+              }).toList();
 
               if (activeDocs.isEmpty) {
                 return Padding(
@@ -1007,8 +1116,12 @@ class _DashboardPageState extends State<DashboardPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       GestureDetector(
-                        onTap: () =>
-                            _showPendingTasksSheet(context, activeDocs),
+                        onTap: () => _showTasksSheet(
+                          context,
+                          activeDocs,
+                          title: 'Active Tasks',
+                          emptyMessage: 'No pending tasks 🎉',
+                        ),
                         child: _momentumCard(
                           activeCount: activeDocs.length,
                           progress: progress,
@@ -1018,17 +1131,13 @@ class _DashboardPageState extends State<DashboardPage> {
                       // _attendanceCard(),
                       const SizedBox(height: 14),
                       _priorityCards(
-                        criticalCount: criticalCount,
-                        highCount: highCount,
+                        criticalDocs: criticalDocs,
+                        highDocs: highDocs,
                       ),
                       const SizedBox(height: 20),
-                      const Text(
-                        'Active Tasks',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: _subtitle,
-                        ),
+                      _taskStatusButtons(
+                        completedDocs: completedDocs,
+                        activeDocs: activeDocs,
                       ),
                       const SizedBox(height: 32),
                       const Expanded(
@@ -1053,7 +1162,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
                   // ✅ FIX: uses the SAME activeDocs/progress computed above
-                  // from _myTasksStream (this project only), instead of the
+                  // from _tasksStream (this project only), instead of the
                   // old separate getAllMyTasks() stream. That duplicate
                   // stream queried across ALL projects (ignoring this one)
                   // and needed a composite Firestore index it likely didn't
@@ -1061,7 +1170,12 @@ class _DashboardPageState extends State<DashboardPage> {
                   // activeCount: 0, progress: 0. That's why the bar looked
                   // static no matter what you did on this screen.
                   GestureDetector(
-                    onTap: () => _showPendingTasksSheet(context, activeDocs),
+                    onTap: () => _showTasksSheet(
+                      context,
+                      activeDocs,
+                      title: 'Active Tasks',
+                      emptyMessage: 'No pending tasks 🎉',
+                    ),
                     child: _momentumCard(
                       activeCount: activeDocs.length,
                       progress: progress,
@@ -1072,17 +1186,16 @@ class _DashboardPageState extends State<DashboardPage> {
                   // _attendanceCard(),
                   // const SizedBox(height: 14),
                   _priorityCards(
-                    criticalCount: criticalCount,
-                    highCount: highCount,
+                    criticalDocs: criticalDocs,
+                    highDocs: highDocs,
                   ),
                   const SizedBox(height: 20),
-                  const Text(
-                    'Active Tasks',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: _subtitle,
-                    ),
+                  // ── Completed (left) / Active (right) buttons — tap
+                  // either to open the full task list for this project,
+                  // filtered to that status. ──
+                  _taskStatusButtons(
+                    completedDocs: completedDocs,
+                    activeDocs: activeDocs,
                   ),
                   const SizedBox(height: 10),
                   ...activeDocs.map((doc) {
@@ -1094,6 +1207,8 @@ class _DashboardPageState extends State<DashboardPage> {
                         .trim();
                     final assignedNames =
                         data['assignedToNames'] as List? ?? [];
+                    final createdByName = (data['assignedByName'] ?? '')
+                        .toString();
                     return GestureDetector(
                       // ✅ ye add karo
                       onTap: () => _showTaskDetail(context, doc.id, data),
@@ -1242,6 +1357,57 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ),
                             const SizedBox(width: 8),
+                            // 👇 "Created by" — shown at the right side of
+                            // the card. Falls back gracefully if the task
+                            // doc doesn't have this field (older tasks).
+                            if (createdByName.isNotEmpty)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text(
+                                    'Created by',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      color: _subtitle,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 9,
+                                        backgroundColor: _heading,
+                                        child: Text(
+                                          createdByName[0].toUpperCase(),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 70,
+                                        ),
+                                        child: Text(
+                                          createdByName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: _heading,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
 
                             // IconButton(
                             //   onPressed: () => _confirmDeleteTask(doc.id, title),

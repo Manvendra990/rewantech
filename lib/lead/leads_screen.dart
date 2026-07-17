@@ -1,11 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:rtstrack/compney_info/customer/customer_screen.dart';
+import 'package:rtstrack/compney_info/customer/add_customer_sheet.dart';
+// import 'package:rtstrack/compney_info/customer/customer_screen.dart';
 import 'package:rtstrack/services/lead_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LeadsScreen extends StatefulWidget {
-  const LeadsScreen({super.key});
+  // Optional status to pre-select when the screen opens (e.g. 'New',
+  // 'In Progress', 'Won', 'Lost'). Defaults to showing all leads.
+  final String? initialStatusFilter;
+
+  const LeadsScreen({super.key, this.initialStatusFilter});
 
   @override
   State<LeadsScreen> createState() => _LeadsScreenState();
@@ -15,14 +20,22 @@ class _LeadsScreenState extends State<LeadsScreen> {
   final _leadService = LeadService();
   String _userName = '';
 
+  // ── Status filter (chips at the top of the list) ──
+  // 'All' shows every lead; anything else filters to that exact status.
+  late String _selectedFilter;
+
   static const _bg = Color(0xFFF4F5FB);
   static const _heading = Color(0xFF111827);
   static const _subtitle = Color(0xFF6B7280);
   static const _statuses = ['New', 'In Progress', 'Won', 'Lost'];
+  static const _filters = ['All', 'New', 'In Progress', 'Won', 'Lost'];
 
   @override
   void initState() {
     super.initState();
+    _selectedFilter = _filters.contains(widget.initialStatusFilter)
+        ? widget.initialStatusFilter!
+        : 'All';
     _loadUser();
   }
 
@@ -472,6 +485,57 @@ class _LeadsScreenState extends State<LeadsScreen> {
     );
   }
 
+  // ── Filter chip row ──────────────────────────────────────
+  Widget _buildFilterRow() {
+    return Container(
+      color: _bg,
+      padding: const EdgeInsets.only(bottom: 10),
+      child: SizedBox(
+        height: 36,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          itemCount: _filters.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (context, i) {
+            final filter = _filters[i];
+            final isSelected = filter == _selectedFilter;
+            final color = filter == 'All' ? _heading : _statusColor(filter);
+            final bg = filter == 'All'
+                ? const Color(0xFFE5E7EB)
+                : _statusBg(filter);
+
+            return GestureDetector(
+              onTap: () => setState(() => _selectedFilter = filter),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isSelected ? bg : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSelected
+                        ? Colors.transparent
+                        : const Color(0xFFE5E7EB),
+                  ),
+                ),
+                child: Text(
+                  filter,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: isSelected ? color : _subtitle,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -524,298 +588,323 @@ class _LeadsScreenState extends State<LeadsScreen> {
           ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: _leadService.getLeads(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Error: ${snapshot.error}',
-                style: const TextStyle(color: Color(0xFFE11D48)),
-              ),
-            );
-          }
-
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final docs = snapshot.data!.docs;
-
-          if (docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.show_chart,
-                    size: 48,
-                    color: Color(0xFFD1D5DB),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'No Lead',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: _subtitle,
+      body: Column(
+        children: [
+          _buildFilterRow(),
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _leadService.getLeads(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Error: ${snapshot.error}',
+                      style: const TextStyle(color: Color(0xFFE11D48)),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Create New Lead',
-                    style: TextStyle(fontSize: 13, color: _subtitle),
-                  ),
-                ],
-              ),
-            );
-          }
+                  );
+                }
 
-          return ListView.builder(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-            itemCount: docs.length,
-            itemBuilder: (context, i) {
-              final doc = docs[i];
-              final data = doc.data() as Map<String, dynamic>;
-              final status = data['status'] ?? 'New';
-              final locked = _isLocked(status);
-              final lostReason = (data['lostReason'] ?? '').toString().trim();
-              final createdAt = data['createdAt'] as Timestamp?;
-              final date = createdAt != null
-                  ? '${createdAt.toDate().day}/${createdAt.toDate().month}/${createdAt.toDate().year}'
-                  : '';
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        // ── Status chip w/ change arrow (locked once Won/Lost) ──
-                        GestureDetector(
-                          onTap: locked
-                              ? null
-                              : () => _changeStatus(doc.id, data),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _statusBg(status),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  status,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: _statusColor(status),
-                                  ),
-                                ),
-                                if (!locked) ...[
-                                  const SizedBox(width: 3),
-                                  Icon(
-                                    Icons.keyboard_arrow_down,
-                                    size: 13,
-                                    color: _statusColor(status),
-                                  ),
-                                ] else ...[
-                                  const SizedBox(width: 3),
-                                  Icon(
-                                    Icons.lock_outline,
-                                    size: 11,
-                                    color: _statusColor(status),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
-                        if (date.isNotEmpty)
-                          Text(
-                            date,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: _subtitle,
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      data['title'] ?? '',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: _heading,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
+                final allDocs = snapshot.data!.docs;
+                final docs = _selectedFilter == 'All'
+                    ? allDocs
+                    : allDocs.where((d) {
+                        final data = d.data() as Map<String, dynamic>;
+                        return (data['status'] ?? 'New') == _selectedFilter;
+                      }).toList();
+
+                if (docs.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(
-                          Icons.person_outline,
-                          size: 13,
-                          color: _subtitle,
+                          Icons.show_chart,
+                          size: 48,
+                          color: Color(0xFFD1D5DB),
                         ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            data['clientName'] ?? '',
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: _subtitle,
-                            ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _selectedFilter == 'All'
+                              ? 'No Lead'
+                              : 'No $_selectedFilter Lead',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: _subtitle,
                           ),
                         ),
-                        GestureDetector(
-                          onTap: () =>
-                              _openComments(doc.id, data['title'] ?? ''),
-                          behavior: HitTestBehavior.opaque,
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(
-                              vertical: 2,
-                              horizontal: 4,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.chat_bubble_outline,
-                                  size: 13,
-                                  color: _subtitle,
-                                ),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Comments',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: _subtitle,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _selectedFilter == 'All'
+                              ? 'Create New Lead'
+                              : 'Try a different filter',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: _subtitle,
                           ),
                         ),
                       ],
                     ),
+                  );
+                }
 
-                    if ((data['phoneNumber'] ?? '')
+                return ListView.builder(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                  itemCount: docs.length,
+                  itemBuilder: (context, i) {
+                    final doc = docs[i];
+                    final data = doc.data() as Map<String, dynamic>;
+                    final status = data['status'] ?? 'New';
+                    final locked = _isLocked(status);
+                    final lostReason = (data['lostReason'] ?? '')
                         .toString()
-                        .trim()
-                        .isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.phone_outlined,
-                            size: 13,
-                            color: _subtitle,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            data['phoneNumber'],
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: _subtitle,
-                            ),
+                        .trim();
+                    final createdAt = data['createdAt'] as Timestamp?;
+                    final date = createdAt != null
+                        ? '${createdAt.toDate().day}/${createdAt.toDate().month}/${createdAt.toDate().year}'
+                        : '';
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
                           ),
                         ],
                       ),
-                    ],
-                    if ((data['description'] ?? '')
-                        .toString()
-                        .trim()
-                        .isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        data['description'],
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, color: _subtitle),
-                      ),
-                    ],
-                    // ── Lost reason banner ──
-                    if (status == 'Lost' && lostReason.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFDE2E6),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.info_outline,
-                              size: 13,
-                              color: Color(0xFFE11D48),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                lostReason,
-                                style: const TextStyle(
-                                  fontSize: 11.5,
-                                  color: Color(0xFFB91C1C),
-                                  fontWeight: FontWeight.w600,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              // ── Status chip w/ change arrow (locked once Won/Lost) ──
+                              GestureDetector(
+                                onTap: locked
+                                    ? null
+                                    : () => _changeStatus(doc.id, data),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _statusBg(status),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        status,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: _statusColor(status),
+                                        ),
+                                      ),
+                                      if (!locked) ...[
+                                        const SizedBox(width: 3),
+                                        Icon(
+                                          Icons.keyboard_arrow_down,
+                                          size: 13,
+                                          color: _statusColor(status),
+                                        ),
+                                      ] else ...[
+                                        const SizedBox(width: 3),
+                                        Icon(
+                                          Icons.lock_outline,
+                                          size: 11,
+                                          color: _statusColor(status),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                                 ),
+                              ),
+                              const Spacer(),
+                              if (date.isNotEmpty)
+                                Text(
+                                  date,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: _subtitle,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            data['title'] ?? '',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: _heading,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.person_outline,
+                                size: 13,
+                                color: _subtitle,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  data['clientName'] ?? '',
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: _subtitle,
+                                  ),
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () =>
+                                    _openComments(doc.id, data['title'] ?? ''),
+                                behavior: HitTestBehavior.opaque,
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: 2,
+                                    horizontal: 4,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.chat_bubble_outline,
+                                        size: 13,
+                                        color: _subtitle,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Comments',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: _subtitle,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          if ((data['phoneNumber'] ?? '')
+                              .toString()
+                              .trim()
+                              .isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.phone_outlined,
+                                  size: 13,
+                                  color: _subtitle,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  data['phoneNumber'],
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: _subtitle,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          if ((data['description'] ?? '')
+                              .toString()
+                              .trim()
+                              .isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              data['description'],
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: _subtitle,
                               ),
                             ),
                           ],
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.account_circle_outlined,
-                          size: 13,
-                          color: _subtitle,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'By ${data['createdByName'] ?? ''}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: _subtitle,
+                          // ── Lost reason banner ──
+                          if (status == 'Lost' && lostReason.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFDE2E6),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(
+                                    Icons.info_outline,
+                                    size: 13,
+                                    color: Color(0xFFE11D48),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      lostReason,
+                                      style: const TextStyle(
+                                        fontSize: 11.5,
+                                        color: Color(0xFFB91C1C),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.account_circle_outlined,
+                                size: 13,
+                                color: _subtitle,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'By ${data['createdByName'] ?? ''}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: _subtitle,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-            },
-          );
-        },
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

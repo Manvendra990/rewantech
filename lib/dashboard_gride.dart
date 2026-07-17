@@ -530,42 +530,66 @@ class _DashboardGridScreenState extends State<DashboardGridScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('projects')
-                          .where('status', isEqualTo: 'active')
-                          .snapshots(),
-                      builder: (context, snapshot) {
-                        final loading =
-                            snapshot.connectionState == ConnectionState.waiting;
-                        final count = snapshot.data?.docs.length ?? 0;
-                        return _StatCard(
-                          label: 'Active Projects',
-                          value: loading
-                              ? '--'
-                              : count.toString().padLeft(2, '0'),
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                ProjectScreen(initialStatusFilter: 'active'),
+                          ),
                         );
                       },
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('projects')
+                            .where('status', isEqualTo: 'active')
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          final loading =
+                              snapshot.connectionState ==
+                              ConnectionState.waiting;
+                          final count = snapshot.data?.docs.length ?? 0;
+                          return _StatCard(
+                            label: 'Active Projects',
+                            value: loading
+                                ? '--'
+                                : count.toString().padLeft(2, '0'),
+                          );
+                        },
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('leads')
-                          .where('status', isEqualTo: 'new')
-                          .snapshots(),
-                      builder: (context, snapshot) {
-                        final loading =
-                            snapshot.connectionState == ConnectionState.waiting;
-                        final count = snapshot.data?.docs.length ?? 0;
-                        return _StatCard(
-                          label: 'New Leads',
-                          value: loading
-                              ? '--'
-                              : count.toString().padLeft(2, '0'),
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const LeadsScreen(initialStatusFilter: 'New'),
+                          ),
                         );
                       },
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('leads')
+                            .where('status', isEqualTo: 'New')
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          final loading =
+                              snapshot.connectionState ==
+                              ConnectionState.waiting;
+                          final count = snapshot.data?.docs.length ?? 0;
+                          return _StatCard(
+                            label: 'New Leads',
+                            value: loading
+                                ? '--'
+                                : count.toString().padLeft(2, '0'),
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ],

@@ -93,6 +93,19 @@ class TaskService {
       String attachmentUrl = '';
       String attachmentName = '';
 
+      // ✅ Resolve the creator's display name once, so the task doc carries
+      // both the uid (for permission checks / arrayContains queries) and a
+      // human-readable name (so UI like the dashboard's "Created by" block
+      // doesn't need a separate lookup per task).
+      String assignedByName = '';
+      if (currentUid != null) {
+        final creatorDoc = await _firestore
+            .collection('registration')
+            .doc(currentUid)
+            .get();
+        assignedByName = (creatorDoc.data()?['name'] ?? '').toString();
+      }
+
       final projectRef = _firestore.collection('projects').doc(projectId);
       final taskRef = projectRef.collection('tasks').doc(); // pre-generate ID
 
@@ -115,6 +128,7 @@ class TaskService {
           'assignedToUids': assignees.map((a) => a['uid']).toList(),
           'assignedToNames': assignees.map((a) => a['name']).toList(),
           'assignedByUid': currentUid,
+          'assignedByName': assignedByName,
           'status': 'pending',
           'projectName': projectName,
           'attachmentName': attachmentName, // ✅ file name
